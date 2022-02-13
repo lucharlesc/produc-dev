@@ -22,8 +22,6 @@ class App {
     }
 }
 class Component extends HTMLElement {
-    initRender = true;
-    initStatesCache = {};
     updateState(state) {
         for (var key in state) {
             this.state[key] = state[key];
@@ -31,112 +29,114 @@ class Component extends HTMLElement {
         this.reRender();
     }
     initState(initState) {
+        var initStateId = window.cluApp.nextInitStateId++;
+        for (var key in initState) {
+            if (typeof initState[key] == "function") {
+                initState[key] = {
+                    type: "boundedFunction",
+                    unbounded: initState[key],
+                    bounded: initState[key].bind(this)
+                };
+            }
+        }
+        window.cluApp.initStates[initStateId] = initState;
+        return initStateId;
+    }
+    reRender() {
+        var initStateId = this.getAttribute("state");
+        this.initStateId = initStateId;
+        this.removeAttribute("state");
+        var initState = window.cluApp.initStates[initStateId];
+        for (var key in initState) {
+            if (typeof initState[key] == "object" && initState[key].type == "boundedFunction") {
+                this.state[key] = initState[key].bounded;
+            } else {
+                this.state[key] = initState[key];
+            }
+        }
+        function loopThruChildren(element, element2) {
+            var childrenToRemove = [];
+            var childrenToReplace = [];
+            var childrenToAppend = [];
+            for (var i = 0; i < element.childNodes.length; i++) {
+                var child = element.childNodes[i];
+                var child2 = element2.childNodes[i];
+                if (!child2) {
+                    childrenToRemove.push(child);
+                } else if (child.nodeName != child2.nodeName) {
+                    childrenToReplace.push([child2, child]);
+                } else if (Object.getPrototypeOf(child) instanceof Component) {
+                    if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
+                        delete window.cluApp.initStates[child2.getAttribute("state")];
+                    } else {
+                        delete window.cluApp.initStates[child.initStateId];
+                        child.setAttribute("state", child2.getAttribute("state"));
+                        child.reRender();
+                    }
+                } else if (child.nodeType == 3 && child.nodeValue != child2.nodeValue) {
+                    childrenToReplace.push([child2, child]);
+                } else {
+                    loopThruChildren(child, child2);
+                }
+            }
+            for (var i = element.childNodes.length; i < element2.childNodes.length; i++) {
+                childrenToAppend.push(element2.childNodes[i]);
+            }
+            for (var c of childrenToRemove) {
+                c.parentNode.removeChild(c);
+            }
+            for (var c of childrenToReplace) {
+                setDeclarativeEvents(c[1]);
+                c[1].parentNode.replaceChild(c[0], c[1]);
+            }
+            for (var c of childrenToAppend) {
+                setDeclarativeEvents(c);
+                element.appendChild(c);
+            }
+        }
         function objectsEqual(a, b) {
             if (!a || !b) {
                 return false;
             }
             for (var key in a) {
-                if (a[key] != b[key]) {
+                if (typeof a[key] == "object" && a[key].type == "boundedFunction" && typeof b[key] == "object" && b[key].type == "boundedFunction") {
+                    if (a[key].unbounded != b[key].unbounded) {
+                        return false;
+                    }
+                } else if (a[key] != b[key]) {
                     return false;
                 }
             }
             return true;
         }
-        var deepCopy = {};
-        for (var key in initState) {
-            deepCopy[key] = initState[key];
-        }
-        for (var key in this.initStatesCache) {
-            if (objectsEqual(this.initStatesCache[key], deepCopy)) {
-                return key;
-            }
-        }
-        var initStateId = window.cluApp.nextInitStateId++;
-        for (var key in initState) {
-            if (typeof initState[key] == "function") {
-                initState[key] = initState[key].bind(this);
-            }
-        }
-        window.cluApp.initStates[initStateId] = initState;
-        this.initStatesCache[initStateId] = deepCopy;
-        return initStateId;
-    }
-    reRender() {
-        var initStateId = this.getAttribute("state");
-        var initState = window.cluApp.initStates[initStateId];
-        for (var key in initState) {
-            this.state[key] = initState[key];
-        }
-        if (this.initRender) {
-            this.innerHTML = this.render();
-            function loopThruNonComponentChildren(element, func) {
-                for (var child of element.children) {
-                    if (!(Object.getPrototypeOf(child) instanceof Component)) {
-                        func(child);
-                        loopThruNonComponentChildren(child, func);
-                    }
-                }
-            }
-            function setDeclarativeEvents(element) {
+        function setDeclarativeEvents(element) {
+            if (element.nodeType == 1) {
                 for (var attr of element.attributes) {
                     if (attr.name.slice(0, 3) == "on-") {
                         let eventHandler = attr.value;
                         element.addEventListener(attr.name.slice(3), function (event) {
                             this[eventHandler](event);
                         }.bind(this));
-                        // element.removeAttribute(attr.name);
+                        element.removeAttribute(attr.name);
                     }
                 }
             }
-            setDeclarativeEvents = setDeclarativeEvents.bind(this);
-            loopThruNonComponentChildren(this, setDeclarativeEvents);
-            this.initRender = false;
-            return;
         }
-        function loopThruChildren(element, element2, func) {
-            for (var i = 0; i < element.children.length; i++) {
-                if (Object.getPrototypeOf(element.children[i]) instanceof Component) {
-                    func(element.children[i], element2.children[i]);
-                } else {
-                    func(element.children[i], element2.children[i]);
-                    loopThruChildren(element.children[i], element2.children[i], func);
-                }
-            }
-            var childrenToAppend = [];
-            if (element2.children.length > element.children.length) {
-                for (var i = element.children.length; i < element2.children.length; i++) {
-                    childrenToAppend.push(element2.children[i]);
-                }
-            }
-            for (var c of childrenToAppend) {
-                element.append(c);
-            }
-        }
-        function checkReRender(element, element2) {
-            if (Object.getPrototypeOf(element) instanceof Component) {
-                if (element.getAttribute("state") != element2.getAttribute("state")) {
-                    element.setAttribute("state", element2.getAttribute("state"));
-                    element.reRender();
-                }
-            } else if (element.children.length == 0) {
-                if (element.innerHTML != element2.innerHTML) {
-                    element.innerHTML = element2.innerHTML;
-                }
-            }
-        }
-        var div = document.createElement("div");
-        div.innerHTML = this.render();
-        loopThruChildren(this, div, checkReRender);
+        loopThruChildren = loopThruChildren.bind(this);
+        setDeclarativeEvents = setDeclarativeEvents.bind(this);
+        var clone = this.cloneNode();
+        clone.innerHTML = this.render();
+        loopThruChildren(this, clone);
     }
+    init() {}
     connectedCallback() {
+        this.init();
         if (!Object.getPrototypeOf(this).isStyled) {
             var styleElement = document.createElement("style");
             styleElement.innerHTML = this.styles;
             document.head.append(styleElement);
             Object.getPrototypeOf(this).isStyled = true;
         }
-        // delete window.cluApp.initStates[initStateId];
-        // this.removeAttribute("state");
         for (var event in this.events) {
             this.addEventListener(event, function (e) {
                 this.events[event].bind(this)(e);
