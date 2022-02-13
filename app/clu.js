@@ -43,15 +43,16 @@ class Component extends HTMLElement {
         return initStateId;
     }
     reRender() {
-        var initStateId = this.getAttribute("state");
-        this.initStateId = initStateId;
-        this.removeAttribute("state");
-        var initState = window.cluApp.initStates[initStateId];
-        for (var key in initState) {
-            if (typeof initState[key] == "object" && initState[key].type == "boundedFunction") {
-                this.state[key] = initState[key].bounded;
-            } else {
-                this.state[key] = initState[key];
+        if (this.hasAttribute("state")) {
+            this.initStateId = this.getAttribute("state");
+            this.removeAttribute("state");
+            var initState = window.cluApp.initStates[this.initStateId];
+            for (var key in initState) {
+                if (typeof initState[key] == "object" && initState[key].type == "boundedFunction") {
+                    this.state[key] = initState[key].bounded;
+                } else {
+                    this.state[key] = initState[key];
+                }
             }
         }
         function loopThruChildren(element, element2) {
@@ -66,16 +67,65 @@ class Component extends HTMLElement {
                 } else if (child.nodeName != child2.nodeName) {
                     childrenToReplace.push([child2, child]);
                 } else if (Object.getPrototypeOf(child) instanceof Component) {
-                    if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
-                        delete window.cluApp.initStates[child2.getAttribute("state")];
-                    } else {
-                        delete window.cluApp.initStates[child.initStateId];
+                    for (var attr of child.attributes) {
+                        if (attr.name != "state") {
+                            if (child2.hasAttribute(attr.name)) {
+                                if (attr.value != child2.getAttribute(attr.name)) {
+                                    child.setAttribute(attr.name, child2.getAttribute(attr.name));
+                                }
+                            } else {
+                                child.removeAttribute(attr.name)
+                            }
+                        }
+                    }
+                    for (var attr of child2.attributes) {
+                        if (attr.name != "state") {
+                            if (!child.hasAttribute(attr.name)) {
+                                if (attr.name.slice(0, 3) != "on-") {
+                                    child.setAttribute(attr.name, attr.value);
+                                }
+                            }
+                        }
+                    }
+                    if (!child.initStateId && !child2.hasAttribute("state")) {
+                        continue;
+                    } else if (!child.initStateId && child2.hasAttribute("state")) {
                         child.setAttribute("state", child2.getAttribute("state"));
                         child.reRender();
+                    } else if (child.initStateId && !child2.hasAttribute("state")) {
+                        delete window.cluApp.initStates[child.initStateId];
+                        child.removeAttribute("state");
+                        child.reRender();
+                    } else if (child.initStateId && child2.hasAttribute("state")) {
+                        if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
+                            delete window.cluApp.initStates[child2.getAttribute("state")];
+                        } else {
+                            delete window.cluApp.initStates[child.initStateId];
+                            child.setAttribute("state", child2.getAttribute("state"));
+                            child.reRender();
+                        }
                     }
                 } else if (child.nodeType == 3 && child.nodeValue != child2.nodeValue) {
                     childrenToReplace.push([child2, child]);
                 } else {
+                    if (child.nodeType == 1) {
+                        for (var attr of child.attributes) {
+                            if (child2.hasAttribute(attr.name)) {
+                                if (attr.value != child2.getAttribute(attr.name)) {
+                                    child.setAttribute(attr.name, child2.getAttribute(attr.name));
+                                }
+                            } else {
+                                child.removeAttribute(attr.name)
+                            }
+                        }
+                        for (var attr of child2.attributes) {
+                            if (!child.hasAttribute(attr.name)) {
+                                if (attr.name.slice(0, 3) != "on-") {
+                                    child.setAttribute(attr.name, attr.value);
+                                }
+                            }
+                        }
+                    }
                     loopThruChildren(child, child2);
                 }
             }

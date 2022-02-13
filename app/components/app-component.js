@@ -20,13 +20,17 @@ export default class AppComponent extends clu.Component {
             items: resData.items
         });
     }
+    foobar(event) {
+        console.log("foober")
+    }
     render() {
         // if (this.state.items.length == 0) {
         //     return `<p>no items</p>`;
         // }
         return `
-            <p><span>counter</span> ${this.state.counter}</p>
-            <item-input state="${this.initState({ handleKeydown: this.getItems })}"></item-input>
-            <item-list state="${this.initState({ items: this.state.items })}"></item-list>`;
+            <p><span><span data-foo="${this.state.counter}">counter</span> ${this.state.counter}</span></p>
+            <header-component data-foo="${this.state.counter}" on-click="foobar"></header-component>
+            <item-input data-foo="${this.state.counter}" state="${this.initState({ handleKeydown: this.getItems })}"></item-input>
+            <item-list data-foo="${this.state.counter}" ${this.state.counter >= 5 ? "hidden" : ""} state="${this.initState({ items: this.state.items })}"></item-list>`;
     }
 }
