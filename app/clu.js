@@ -88,7 +88,7 @@ class Component extends HTMLElement {
                         }
                     }
                     if (!child.initStateId && !child2.hasAttribute("state")) {
-                        continue;
+                        child.reRender();
                     } else if (!child.initStateId && child2.hasAttribute("state")) {
                         child.setAttribute("state", child2.getAttribute("state"));
                         child.reRender();
@@ -99,6 +99,7 @@ class Component extends HTMLElement {
                     } else if (child.initStateId && child2.hasAttribute("state")) {
                         if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
                             delete window.cluApp.initStates[child2.getAttribute("state")];
+                            child.reRender();
                         } else {
                             delete window.cluApp.initStates[child.initStateId];
                             child.setAttribute("state", child2.getAttribute("state"));
@@ -175,7 +176,27 @@ class Component extends HTMLElement {
         loopThruChildren = loopThruChildren.bind(this);
         setDeclarativeEvents = setDeclarativeEvents.bind(this);
         var clone = this.cloneNode();
-        clone.innerHTML = this.render();
+        clone.state = this.state;
+        clone.initState = clone.initState.bind(this);
+        clone.innerHTML = clone.render();
+        if (this.nodeType == 1) {
+            for (var attr of this.attributes) {
+                if (clone.hasAttribute(attr.name)) {
+                    if (attr.value != clone.getAttribute(attr.name)) {
+                        this.setAttribute(attr.name, clone.getAttribute(attr.name));
+                    }
+                } else {
+                    this.removeAttribute(attr.name)
+                }
+            }
+            for (var attr of clone.attributes) {
+                if (!this.hasAttribute(attr.name)) {
+                    if (attr.name.slice(0, 3) != "on-") {
+                        this.setAttribute(attr.name, attr.value);
+                    }
+                }
+            }
+        }
         loopThruChildren(this, clone);
     }
     init() {}
@@ -216,7 +237,7 @@ class RouterRoute extends Component {
     };
     events = {};
     render() {
-        if (this.getAttribute("path") == window.location.pathname.slice(0, this.getAttribute("path").length)) {
+        if (this.getAttribute("path") == window.location.pathname) {
             this.removeAttribute("hidden");
             return `${this.state.html}`;
         } else {
@@ -227,7 +248,9 @@ class RouterRoute extends Component {
 }
 class RouterLink extends Component {
     styles = ``;
-    state = {};
+    state = {
+        html: this.innerHTML
+    };
     events = {
         click: function (event) {
             event.preventDefault();
@@ -239,7 +262,7 @@ class RouterLink extends Component {
         }
     };
     render() {
-        return `${this.innerHTML}`;
+        return `${this.state.html}`;
     }
 }
 export { App, Component };
