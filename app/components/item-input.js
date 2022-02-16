@@ -19,6 +19,6 @@ export default class ItemInput extends clu.Component {
         }
     }
     render() {
-        return `<input type="text" on-keydown="handleKeydown">`;
+        return this.html`<item-input><input type="text" on-keydown="${this.handleKeydown}"></item-input>`;
     }
 }

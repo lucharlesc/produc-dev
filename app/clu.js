@@ -1,10 +1,12 @@
 class App {
     nextInitStateId = 0;
     initStates = {};
+    nextHandlerId = 0;
+    handlers = {};
     component(componentName, componentClass) {
         window.customElements.define(componentName, componentClass);
     }
-    start(rootName, id) {
+    start(rootTagName) {
         window.cluApp = this;
         window.addEventListener("popstate", function (event) {
             var routerRoutes = document.getElementsByTagName("router-route");
@@ -14,19 +16,38 @@ class App {
         });
         this.component("router-route", RouterRoute);
         this.component("router-link", RouterLink);
-        var rootElement = document.createElement(rootName);
-        if (id) {
-            rootElement.id = id;
-        }
+        var rootElement = document.createElement(rootTagName);
         document.body.prepend(rootElement);
     }
 }
 class Component extends HTMLElement {
+    initStateId = undefined;
+    handlers = [];
+    html(strings, ...exps) {
+        var output = "";
+        for (var i = 0; i < strings.length; i++) {
+            if (strings[i].slice(-7) == `state="` || strings[i].slice(-7) == `state='`) {
+                output += strings[i] + this.initState(exps[i]);
+            } else if (/on-\w+=["']$/.test(strings[i])) {
+                output += strings[i] + this.initHandler(exps[i]);
+            } else if (exps[i]) {
+                output += strings[i] + exps[i];
+            } else {
+                output += strings[i];
+            }
+        }
+        return output.trim();
+    }
     updateState(state) {
         for (var key in state) {
             this.state[key] = state[key];
         }
         this.reRender();
+    }
+    initHandler(handler) {
+        var handlerId = window.cluApp.nextHandlerId++;
+        window.cluApp.handlers[handlerId] = handler.bind(this);
+        return handlerId;
     }
     initState(initState) {
         var initStateId = window.cluApp.nextInitStateId++;
@@ -81,31 +102,27 @@ class Component extends HTMLElement {
                     for (var attr of child2.attributes) {
                         if (attr.name != "state") {
                             if (!child.hasAttribute(attr.name)) {
-                                if (attr.name.slice(0, 3) != "on-") {
+                                // if (attr.name.slice(0, 3) != "on-") {
                                     child.setAttribute(attr.name, attr.value);
-                                }
+                                // }
                             }
                         }
                     }
                     if (!child.initStateId && !child2.hasAttribute("state")) {
-                        child.reRender();
                     } else if (!child.initStateId && child2.hasAttribute("state")) {
                         child.setAttribute("state", child2.getAttribute("state"));
-                        child.reRender();
                     } else if (child.initStateId && !child2.hasAttribute("state")) {
                         delete window.cluApp.initStates[child.initStateId];
                         child.removeAttribute("state");
-                        child.reRender();
                     } else if (child.initStateId && child2.hasAttribute("state")) {
                         if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
                             delete window.cluApp.initStates[child2.getAttribute("state")];
-                            child.reRender();
                         } else {
                             delete window.cluApp.initStates[child.initStateId];
                             child.setAttribute("state", child2.getAttribute("state"));
-                            child.reRender();
                         }
                     }
+                    child.reRender();
                 } else if (child.nodeType == 3 && child.nodeValue != child2.nodeValue) {
                     childrenToReplace.push([child2, child]);
                 } else {
@@ -121,12 +138,13 @@ class Component extends HTMLElement {
                         }
                         for (var attr of child2.attributes) {
                             if (!child.hasAttribute(attr.name)) {
-                                if (attr.name.slice(0, 3) != "on-") {
+                                // if (attr.name.slice(0, 3) != "on-") {
                                     child.setAttribute(attr.name, attr.value);
-                                }
+                                // }
                             }
                         }
                     }
+                    setDeclarativeEvents(child);
                     loopThruChildren(child, child2);
                 }
             }
@@ -165,39 +183,50 @@ class Component extends HTMLElement {
                 for (var attr of element.attributes) {
                     if (attr.name.slice(0, 3) == "on-") {
                         let eventHandler = attr.value;
-                        element.addEventListener(attr.name.slice(3), function (event) {
-                            this[eventHandler](event);
-                        }.bind(this));
+                        // element.removeEventListener(attr.name.slice(3), window.cluApp.handlers[this.handlers[attr.name.slice(3)]]);
+                        element.addEventListener(attr.name.slice(3), window.cluApp.handlers[eventHandler]);
+                        this.handlers.push([element, attr.name.slice(3), window.cluApp.handlers[eventHandler]]);
                         element.removeAttribute(attr.name);
                     }
                 }
             }
+            for (var i = 0; i < element.childNodes.length; i++) {
+                setDeclarativeEvents(element.childNodes[i]);
+            }
         }
         loopThruChildren = loopThruChildren.bind(this);
         setDeclarativeEvents = setDeclarativeEvents.bind(this);
+        var div = document.createElement("div");
         var clone = this.cloneNode();
+        div.appendChild(clone);
         clone.state = this.state;
         clone.initState = clone.initState.bind(this);
-        clone.innerHTML = clone.render();
+        clone.initHandler = clone.initHandler.bind(this);
+        clone.outerHTML = clone.render();
         if (this.nodeType == 1) {
             for (var attr of this.attributes) {
-                if (clone.hasAttribute(attr.name)) {
-                    if (attr.value != clone.getAttribute(attr.name)) {
-                        this.setAttribute(attr.name, clone.getAttribute(attr.name));
+                if (div.childNodes[0].hasAttribute(attr.name)) {
+                    if (attr.value != div.childNodes[0].getAttribute(attr.name)) {
+                        this.setAttribute(attr.name, div.childNodes[0].getAttribute(attr.name));
                     }
                 } else {
                     this.removeAttribute(attr.name)
                 }
             }
-            for (var attr of clone.attributes) {
+            for (var attr of div.childNodes[0].attributes) {
                 if (!this.hasAttribute(attr.name)) {
-                    if (attr.name.slice(0, 3) != "on-") {
+                    // if (attr.name.slice(0, 3) != "on-") {
                         this.setAttribute(attr.name, attr.value);
-                    }
+                    // }
                 }
             }
         }
-        loopThruChildren(this, clone);
+        for (var handler of this.handlers) {
+            handler[0].removeEventListener(handler[1], handler[2]);
+        }
+        this.handlers = [];
+        setDeclarativeEvents(this);
+        loopThruChildren(this, div.childNodes[0]);
     }
     init() {}
     connectedCallback() {
@@ -208,11 +237,11 @@ class Component extends HTMLElement {
             document.head.append(styleElement);
             Object.getPrototypeOf(this).isStyled = true;
         }
-        for (var event in this.events) {
-            this.addEventListener(event, function (e) {
-                this.events[event].bind(this)(e);
-            });
-        }
+        // for (var event in this.events) {
+        //     this.addEventListener(event, function (e) {
+        //         this.events[event].bind(this)(e);
+        //     });
+        // }
         this.reRender();
     }
     async fetchData(url, data) {
@@ -237,13 +266,7 @@ class RouterRoute extends Component {
     };
     events = {};
     render() {
-        if (this.getAttribute("path") == window.location.pathname) {
-            this.removeAttribute("hidden");
-            return `${this.state.html}`;
-        } else {
-            this.setAttribute("hidden", "");
-            return ``;
-        }
+        return `<router-route path="${this.state.path}" ${this.state.path == window.location.pathname ? "" : "hidden"}>${this.state.path == window.location.pathname ? this.state.html : ""}</router-route>`;
     }
 }
 class RouterLink extends Component {
@@ -254,7 +277,7 @@ class RouterLink extends Component {
     events = {
         click: function (event) {
             event.preventDefault();
-            window.history.pushState({}, "", this.getAttribute("path"));
+            window.history.pushState({}, "", this.state.path);
             var routerRoutes = document.getElementsByTagName("router-route");
             for (var routerRoute of routerRoutes) {
                 routerRoute.reRender();
@@ -262,7 +285,7 @@ class RouterLink extends Component {
         }
     };
     render() {
-        return `${this.state.html}`;
+        return `<router-link path="${this.state.path}">${this.state.html}</router-link>`;
     }
 }
 export { App, Component };

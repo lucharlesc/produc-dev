@@ -3,12 +3,8 @@ import * as clu from "../clu.js";
 export default class HeaderComponent extends clu.Component {
     styles = ``;
     state = {};
-    events = {
-        click: function (event) {
-            console.log("barfoo")
-        }
-    };
+    events = {};
     render() {
-        return `<p>header</p>`;
+        return `<header-component><p>header</p></header-component>`;
     }
 }

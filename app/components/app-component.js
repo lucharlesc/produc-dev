@@ -23,17 +23,20 @@ export default class AppComponent extends clu.Component {
     foobar(event) {
         console.log("foober")
     }
+    appclick(event) {
+        console.log("appclick")
+    }
     render() {
-        // if (this.state.items.length == 0) {
-        //     return `<p>no items</p>`;
-        // }
-        return `
-            <router-link path="/foo"><a href="/foo">link to foo</a></router-link>
-            <router-route path="/">this is root</router-route>
-            <router-route path="/foo">this is foo</router-route>
-            <p><span><span data-foo="${this.state.counter}">counter</span> ${this.state.counter}</span></p>
-            <header-component data-foo="${this.state.counter}" on-click="foobar" state="${this.initState({ myarr: [0, 1, 2] })}"></header-component>
-            <item-input data-foo="${this.state.counter}" state="${this.initState({ handleKeydown: this.getItems })}"></item-input>
-            <item-list data-foo="${this.state.counter}" state="${this.initState({ items: this.state.items })}"></item-list>`;
+        return this.html`
+            <app-component id="appid" on-click="${this.appclick}">
+                <router-link state="${{ path: "/foo" }}"><a href="/foo">link to foo</a></router-link>
+                <router-route state="${{ path: "/" }}">this is root</router-route>
+                <router-route state="${{ path: "/foo" }}">this is foo</router-route>
+                <p><span><span on-click="${this.foobar}">counter</span> ${this.state.counter}</span></p>
+                <header-component state="${{ myarr: [0, 1, 2] }}"></header-component>
+                <item-input state="${{ handleKeydown: this.getItems }}"></item-input>
+                <item-list state="${{ items: this.state.items }}"></item-list>
+            </app-component>
+            `;
     }
 }

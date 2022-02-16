@@ -7,7 +7,10 @@ export default class ItemList extends clu.Component {
     clickHandler(event) {
         console.log("click")
     }
+    tester(event) {
+        console.log("tester")
+    }
     render() {
-        return `${this.state.items.reduce((prev, cur) => prev + `<p on-click="clickHandler">` + cur.text + "</p>", "")}`;
+        return this.html`<item-list on-click="${this.tester}">${this.state.items.reduce((prev, cur) => prev + this.html`<p on-click="${this.clickHandler}">` + cur.text + "</p>", "")}</item-list>`;
     }
 }
