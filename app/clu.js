@@ -264,9 +264,8 @@ class RouterRoute extends Component {
     state = {
         html: this.innerHTML
     };
-    events = {};
     render() {
-        return `<router-route path="${this.state.path}" ${this.state.path == window.location.pathname ? "" : "hidden"}>${this.state.path == window.location.pathname ? this.state.html : ""}</router-route>`;
+        return this.html`<router-route path="${this.state.path}" ${this.state.path == window.location.pathname ? "" : "hidden"}>${this.state.path == window.location.pathname ? this.state.html : ""}</router-route>`;
     }
 }
 class RouterLink extends Component {
@@ -274,18 +273,16 @@ class RouterLink extends Component {
     state = {
         html: this.innerHTML
     };
-    events = {
-        click: function (event) {
-            event.preventDefault();
-            window.history.pushState({}, "", this.state.path);
-            var routerRoutes = document.getElementsByTagName("router-route");
-            for (var routerRoute of routerRoutes) {
-                routerRoute.reRender();
-            }
+    handleClick(event) {
+        event.preventDefault();
+        window.history.pushState({}, "", this.state.path);
+        var routerRoutes = document.getElementsByTagName("router-route");
+        for (var routerRoute of routerRoutes) {
+            routerRoute.reRender();
         }
-    };
+    }
     render() {
-        return `<router-link path="${this.state.path}">${this.state.html}</router-link>`;
+        return this.html`<router-link path="${this.state.path}" on-click="${this.handleClick}">${this.state.html}</router-link>`;
     }
 }
 export { App, Component };

@@ -3,7 +3,6 @@ import * as clu from "../clu.js";
 export default class ItemList extends clu.Component {
     styles = ``;
     state = {};
-    events = {};
     clickHandler(event) {
         console.log("click")
     }

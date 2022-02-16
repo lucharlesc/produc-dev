@@ -3,7 +3,6 @@ import * as clu from "../clu.js";
 export default class ItemInput extends clu.Component {
     styles = ``;
     state = {};
-    events = {};
     async handleKeydown(event) {
         if (event.key == "Enter") {
             var item = {

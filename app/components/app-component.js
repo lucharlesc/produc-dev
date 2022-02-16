@@ -6,7 +6,6 @@ export default class AppComponent extends clu.Component {
         counter: 0,
         items: []
     };
-    events = {};
     init() {
         this.getItems();
     }
