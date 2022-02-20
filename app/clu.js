@@ -3,6 +3,8 @@ class App {
     initStates = {};
     nextHandlerId = 0;
     handlers = {};
+    nextStyleId = 0;
+    styles = {};
     component(componentName, componentClass) {
         window.customElements.define(componentName, componentClass);
     }
@@ -21,13 +23,15 @@ class App {
     }
 }
 class Component extends HTMLElement {
-    initStateId = undefined;
     handlers = [];
+    styles = [];
     html(strings, ...exps) {
         var output = "";
         for (var i = 0; i < strings.length; i++) {
             if (strings[i].slice(-7) == `state="` || strings[i].slice(-7) == `state='`) {
                 output += strings[i] + this.initState(exps[i]);
+            } else if (strings[i].slice(-8) == `styles="` || strings[i].slice(-8) == `styles='`) {
+                output += strings[i] + this.initStyle(exps[i]);
             } else if (/on-\w+=["']$/.test(strings[i])) {
                 output += strings[i] + this.initHandler(exps[i]);
             } else if (exps[i]) {
@@ -44,6 +48,14 @@ class Component extends HTMLElement {
         }
         this.reRender();
     }
+    initStyle(style) {
+        var styleId = window.cluApp.nextStyleId++;
+        window.cluApp.styles[styleId] = {
+            orig: this,
+            style: style
+        };
+        return styleId;
+    }
     initHandler(handler) {
         var handlerId = window.cluApp.nextHandlerId++;
         window.cluApp.handlers[handlerId] = handler.bind(this);
@@ -53,139 +65,179 @@ class Component extends HTMLElement {
         var initStateId = window.cluApp.nextInitStateId++;
         for (var key in initState) {
             if (typeof initState[key] == "function") {
-                initState[key] = {
-                    type: "boundedFunction",
-                    unbounded: initState[key],
-                    bounded: initState[key].bind(this)
-                };
+                initState[key] = initState[key].bind(this);
             }
         }
         window.cluApp.initStates[initStateId] = initState;
         return initStateId;
     }
     reRender() {
-        if (this.hasAttribute("state")) {
-            this.initStateId = this.getAttribute("state");
-            this.removeAttribute("state");
-            var initState = window.cluApp.initStates[this.initStateId];
-            for (var key in initState) {
-                if (typeof initState[key] == "object" && initState[key].type == "boundedFunction") {
-                    this.state[key] = initState[key].bounded;
-                } else {
-                    this.state[key] = initState[key];
-                }
-            }
+
+        // bind functions
+        loopThruChildren = loopThruChildren.bind(this);
+        setDeclarativeEvents = setDeclarativeEvents.bind(this);
+        setStyles = setStyles.bind(this);
+
+        // remove event listeners
+        for (var handler of this.handlers) {
+            handler[0].removeEventListener(handler[1], window.cluApp.handlers[handler[2]]);
+            delete window.cluApp.handlers[handler[2]];
         }
-        function loopThruChildren(element, element2) {
+        this.handlers = [];
+
+        // remove styles
+        for (var style of this.styles) {
+            style.parentNode.removeChild(style);
+        }
+        this.styles = [];
+
+        // update this.state with passed in initStateId from state attribute
+        if (this.hasAttribute("state")) {
+            var initStateId = this.getAttribute("state");
+            var initState = window.cluApp.initStates[initStateId];
+            for (var key in initState) {
+                this.state[key] = initState[key];
+            }
+            delete window.cluApp.initStates[initStateId];
+            this.removeAttribute("state");
+        }
+
+        // set styles with passed in styleId from styles attribute
+        setStyles(this);
+
+        // clone this
+        var clone = this.cloneNode();
+        clone.state = this.state;
+        clone.html = clone.html.bind(this);
+        var div = document.createElement("div");
+        div.appendChild(clone);
+        clone.outerHTML = clone.render();
+        var thisClone = div.childNodes[0];
+
+        // update this attributes to reflect thisClone attributes
+        updateAttributes(this, thisClone);
+
+        // set event listeners
+        setDeclarativeEvents(this);
+
+        // set styles with styleId from styles attribute
+        setStyles(this);
+
+        // loop thru children
+        loopThruChildren(this, thisClone);
+
+        function loopThruChildren(node1, node2) {
+
             var childrenToRemove = [];
             var childrenToReplace = [];
             var childrenToAppend = [];
-            for (var i = 0; i < element.childNodes.length; i++) {
-                var child = element.childNodes[i];
-                var child2 = element2.childNodes[i];
+
+            for (var i = 0; i < node1.childNodes.length; i++) {
+
+                var child1 = node1.childNodes[i];
+                var child2 = node2.childNodes[i];
+
+                // if no child2
                 if (!child2) {
-                    childrenToRemove.push(child);
-                } else if (child.nodeName != child2.nodeName) {
-                    childrenToReplace.push([child2, child]);
-                } else if (Object.getPrototypeOf(child) instanceof Component) {
-                    for (var attr of child.attributes) {
-                        if (attr.name != "state") {
-                            if (child2.hasAttribute(attr.name)) {
-                                if (attr.value != child2.getAttribute(attr.name)) {
-                                    child.setAttribute(attr.name, child2.getAttribute(attr.name));
-                                }
-                            } else {
-                                child.removeAttribute(attr.name)
-                            }
-                        }
-                    }
-                    for (var attr of child2.attributes) {
-                        if (attr.name != "state") {
-                            if (!child.hasAttribute(attr.name)) {
-                                // if (attr.name.slice(0, 3) != "on-") {
-                                    child.setAttribute(attr.name, attr.value);
-                                // }
-                            }
-                        }
-                    }
-                    if (!child.initStateId && !child2.hasAttribute("state")) {
-                    } else if (!child.initStateId && child2.hasAttribute("state")) {
-                        child.setAttribute("state", child2.getAttribute("state"));
-                    } else if (child.initStateId && !child2.hasAttribute("state")) {
-                        delete window.cluApp.initStates[child.initStateId];
-                        child.removeAttribute("state");
-                    } else if (child.initStateId && child2.hasAttribute("state")) {
-                        if (objectsEqual(window.cluApp.initStates[child.initStateId], window.cluApp.initStates[child2.getAttribute("state")])) {
-                            delete window.cluApp.initStates[child2.getAttribute("state")];
-                        } else {
-                            delete window.cluApp.initStates[child.initStateId];
-                            child.setAttribute("state", child2.getAttribute("state"));
-                        }
-                    }
-                    child.reRender();
-                } else if (child.nodeType == 3 && child.nodeValue != child2.nodeValue) {
-                    childrenToReplace.push([child2, child]);
+
+                    // mark child1 for removal
+                    childrenToRemove.push(child1);
+
+                // child2 exists, if different type
+                } else if (child1.nodeName != child2.nodeName) {
+
+                    // mark child1 for replacement by child2
+                    childrenToReplace.push([child2, child1]);
+
+                // child2 exists, same type, if component
+                } else if (Object.getPrototypeOf(child1) instanceof Component) {
+
+                    // update child1 attributes to reflect child2 attributes
+                    updateAttributes(child1, child2);
+
+                    // set event listeners
+                    setDeclarativeEvents(child1);
+
+                    // set styles
+                    setStyles(child1);
+
+                    // rerender child1
+                    child1.reRender();
+
+                // child2 exists, same type, not component, if text and different value
+                } else if (child1.nodeType == 3 && child1.nodeValue != child2.nodeValue) {
+
+                    // mark child1 for replacement by child2
+                    childrenToReplace.push([child2, child1]);
+
+                // child2 exists, same type, not component, not text
                 } else {
-                    if (child.nodeType == 1) {
-                        for (var attr of child.attributes) {
-                            if (child2.hasAttribute(attr.name)) {
-                                if (attr.value != child2.getAttribute(attr.name)) {
-                                    child.setAttribute(attr.name, child2.getAttribute(attr.name));
-                                }
-                            } else {
-                                child.removeAttribute(attr.name)
-                            }
-                        }
-                        for (var attr of child2.attributes) {
-                            if (!child.hasAttribute(attr.name)) {
-                                // if (attr.name.slice(0, 3) != "on-") {
-                                    child.setAttribute(attr.name, attr.value);
-                                // }
-                            }
-                        }
-                    }
-                    setDeclarativeEvents(child);
-                    loopThruChildren(child, child2);
+
+                    // update child1 attributes to reflect child2 attributes
+                    updateAttributes(child1, child2);
+
+                    // set event listeners
+                    setDeclarativeEvents(child1);
+
+                    // set styles
+                    setStyles(child1);
+
+                    // loop thru children
+                    loopThruChildren(child1, child2);
                 }
             }
-            for (var i = element.childNodes.length; i < element2.childNodes.length; i++) {
-                childrenToAppend.push(element2.childNodes[i]);
+
+            // mark extra node2 children for appendment
+            for (var i = node1.childNodes.length; i < node2.childNodes.length; i++) {
+                childrenToAppend.push(node2.childNodes[i]);
             }
+
+            // remove marked nodes
             for (var c of childrenToRemove) {
                 c.parentNode.removeChild(c);
             }
+
+            // replace marked nodes
             for (var c of childrenToReplace) {
-                setDeclarativeEvents(c[1]);
+                setDeclarativeEvents(c[0]);
                 c[1].parentNode.replaceChild(c[0], c[1]);
+                setStyles(c[0]);
             }
+
+            // append marked nodes
             for (var c of childrenToAppend) {
                 setDeclarativeEvents(c);
-                element.appendChild(c);
+                node1.appendChild(c);
+                setStyles(c);
             }
+            
         }
-        function objectsEqual(a, b) {
-            if (!a || !b) {
-                return false;
-            }
-            for (var key in a) {
-                if (typeof a[key] == "object" && a[key].type == "boundedFunction" && typeof b[key] == "object" && b[key].type == "boundedFunction") {
-                    if (a[key].unbounded != b[key].unbounded) {
-                        return false;
-                    }
-                } else if (a[key] != b[key]) {
-                    return false;
+        function setStyles(element) {
+            if (element.nodeType == 1 && element.hasAttribute("styles")) {
+                var styleId = element.getAttribute("styles");
+                var orig = window.cluApp.styles[styleId].orig;
+                var style = window.cluApp.styles[styleId].style;
+                var styleText = "";
+                for (var selector in style) {
+                    styleText += getSelector(element, selector, orig) + "{" + style[selector] + "}";
                 }
+                var styleElement = document.createElement("style");
+                styleElement.textContent = styleText;
+                document.head.append(styleElement);
+                delete window.cluApp.styles[styleId];
+                this.styles.push(styleElement);
+                element.removeAttribute("styles");
             }
-            return true;
+            for (var i = 0; i < element.childNodes.length; i++) {
+                setStyles(element.childNodes[i]);
+            }
         }
         function setDeclarativeEvents(element) {
             if (element.nodeType == 1) {
                 for (var attr of element.attributes) {
                     if (attr.name.slice(0, 3) == "on-") {
-                        let eventHandler = attr.value;
-                        // element.removeEventListener(attr.name.slice(3), window.cluApp.handlers[this.handlers[attr.name.slice(3)]]);
-                        element.addEventListener(attr.name.slice(3), window.cluApp.handlers[eventHandler]);
-                        this.handlers.push([element, attr.name.slice(3), window.cluApp.handlers[eventHandler]]);
+                        element.addEventListener(attr.name.slice(3), window.cluApp.handlers[attr.value]);
+                        this.handlers.push([element, attr.name.slice(3), attr.value]);
                         element.removeAttribute(attr.name);
                     }
                 }
@@ -194,54 +246,42 @@ class Component extends HTMLElement {
                 setDeclarativeEvents(element.childNodes[i]);
             }
         }
-        loopThruChildren = loopThruChildren.bind(this);
-        setDeclarativeEvents = setDeclarativeEvents.bind(this);
-        var div = document.createElement("div");
-        var clone = this.cloneNode();
-        div.appendChild(clone);
-        clone.state = this.state;
-        clone.initState = clone.initState.bind(this);
-        clone.initHandler = clone.initHandler.bind(this);
-        clone.outerHTML = clone.render();
-        if (this.nodeType == 1) {
-            for (var attr of this.attributes) {
-                if (div.childNodes[0].hasAttribute(attr.name)) {
-                    if (attr.value != div.childNodes[0].getAttribute(attr.name)) {
-                        this.setAttribute(attr.name, div.childNodes[0].getAttribute(attr.name));
+        function updateAttributes(node1, node2) {
+            if (node1.nodeType == 1 && node2.nodeType == 1) {
+                for (var attr of node1.attributes) {
+                    if (node2.hasAttribute(attr.name)) {
+                        if (attr.value != node2.getAttribute(attr.name)) {
+                            node1.setAttribute(attr.name, node2.getAttribute(attr.name));
+                        }
+                    } else {
+                        node1.removeAttribute(attr.name)
                     }
-                } else {
-                    this.removeAttribute(attr.name)
                 }
-            }
-            for (var attr of div.childNodes[0].attributes) {
-                if (!this.hasAttribute(attr.name)) {
-                    // if (attr.name.slice(0, 3) != "on-") {
-                        this.setAttribute(attr.name, attr.value);
-                    // }
+                for (var attr of node2.attributes) {
+                    if (!node1.hasAttribute(attr.name)) {
+                        node1.setAttribute(attr.name, attr.value);
+                    }
                 }
             }
         }
-        for (var handler of this.handlers) {
-            handler[0].removeEventListener(handler[1], handler[2]);
+        function getSelector(element, initSelector, orig) {
+            var selector = element.tagName + initSelector;
+            if (element == orig) {
+                return selector;
+            }
+            while (element.parentNode) {
+                selector = element.parentNode.tagName + ">" + selector;
+                element = element.parentNode;
+                if (element == orig) {
+                    break;
+                }
+            }
+            return selector;
         }
-        this.handlers = [];
-        setDeclarativeEvents(this);
-        loopThruChildren(this, div.childNodes[0]);
     }
     init() {}
     connectedCallback() {
         this.init();
-        if (!Object.getPrototypeOf(this).isStyled) {
-            var styleElement = document.createElement("style");
-            styleElement.innerHTML = this.styles;
-            document.head.append(styleElement);
-            Object.getPrototypeOf(this).isStyled = true;
-        }
-        // for (var event in this.events) {
-        //     this.addEventListener(event, function (e) {
-        //         this.events[event].bind(this)(e);
-        //     });
-        // }
         this.reRender();
     }
     async fetchData(url, data) {

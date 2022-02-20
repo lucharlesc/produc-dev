@@ -1,7 +1,6 @@
 import * as clu from "../clu.js";
 
 export default class AppComponent extends clu.Component {
-    styles = ``;
     state = {
         counter: 0,
         items: []
@@ -27,14 +26,34 @@ export default class AppComponent extends clu.Component {
     }
     render() {
         return this.html`
-            <app-component id="appid" on-click="${this.appclick}">
-                <router-link state="${{ path: "/foo" }}"><a href="/foo">link to foo</a></router-link>
+            <app-component 
+                id="appid" 
+                on-click="${this.appclick}"
+                styles="${{
+                    "": `display: block; background: ${this.state.counter % 2 == 0 ? "red" : "blue"}`
+                }}"
+            >
+                <router-link 
+                    state="${{ path: "/foo" }}"
+                    styles="${{
+                        "": `background: blue;`
+                    }}"
+                >
+                    <a href="/foo">link to foo</a>
+                </router-link>
                 <router-route state="${{ path: "/" }}">this is root</router-route>
                 <router-route state="${{ path: "/foo" }}">this is foo</router-route>
-                <p><span><span on-click="${this.foobar}">counter</span> ${this.state.counter}</span></p>
-                <header-component state="${{ myarr: [0, 1, 2] }}"></header-component>
+                <p><span><span styles="${{
+                    "": `color: orange;`
+                }}">counter</span> ${this.state.counter}</span></p>
+                <header-component on-click="${this.foobar}" state="${{ headerText: "headerText" }}"></header-component>
                 <item-input state="${{ handleKeydown: this.getItems }}"></item-input>
-                <item-list state="${{ items: this.state.items }}"></item-list>
+                <item-list 
+                    state="${{ items: this.state.items }}"
+                    styles="${{
+                        "": `display:block; background: green;`
+                    }}"
+                ></item-list>
             </app-component>
             `;
     }
