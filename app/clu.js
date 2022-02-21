@@ -1,9 +1,9 @@
 class App {
-    nextInitStateId = 0;
-    initStates = {};
+    nextPropsId = 0;
+    props = {};
     nextHandlerId = 0;
     handlers = {};
-    nextStyleId = 0;
+    nextStylesId = 0;
     styles = {};
     component(componentName, componentClass) {
         window.customElements.define(componentName, componentClass);
@@ -23,16 +23,18 @@ class App {
     }
 }
 class Component extends HTMLElement {
+    props = {};
+    state = {};
     handlers = [];
     styles = [];
     html(strings, ...exps) {
         var output = "";
         for (var i = 0; i < strings.length; i++) {
-            if (strings[i].slice(-7) == `state="` || strings[i].slice(-7) == `state='`) {
-                output += strings[i] + this.initState(exps[i]);
-            } else if (strings[i].slice(-8) == `styles="` || strings[i].slice(-8) == `styles='`) {
-                output += strings[i] + this.initStyle(exps[i]);
-            } else if (/on-\w+=["']$/.test(strings[i])) {
+            if (strings[i].slice(-6) == `props=`) {
+                output += strings[i] + this.initProps(exps[i]);
+            } else if (strings[i].slice(-7) == `styles=`) {
+                output += strings[i] + this.initStyles(exps[i]);
+            } else if (/on-\w+=$/.test(strings[i])) {
                 output += strings[i] + this.initHandler(exps[i]);
             } else if (exps[i]) {
                 output += strings[i] + exps[i];
@@ -42,40 +44,34 @@ class Component extends HTMLElement {
         }
         return output.trim();
     }
-    updateState(state) {
-        for (var key in state) {
-            this.state[key] = state[key];
+    initProps(props) {
+        var propsId = window.cluApp.nextPropsId++;
+        for (var key in props) {
+            if (typeof props[key] == "function") {
+                props[key] = props[key].bind(this);
+            }
         }
-        this.reRender();
+        window.cluApp.props[propsId] = props;
+        return "\"" + propsId + "\"";
     }
-    initStyle(style) {
-        var styleId = window.cluApp.nextStyleId++;
-        window.cluApp.styles[styleId] = {
+    initStyles(styles) {
+        var stylesId = window.cluApp.nextStylesId++;
+        window.cluApp.styles[stylesId] = {
             orig: this,
-            style: style
+            styles: styles
         };
-        return styleId;
+        return "\"" + stylesId + "\"";
     }
     initHandler(handler) {
         var handlerId = window.cluApp.nextHandlerId++;
         window.cluApp.handlers[handlerId] = handler.bind(this);
-        return handlerId;
-    }
-    initState(initState) {
-        var initStateId = window.cluApp.nextInitStateId++;
-        for (var key in initState) {
-            if (typeof initState[key] == "function") {
-                initState[key] = initState[key].bind(this);
-            }
-        }
-        window.cluApp.initStates[initStateId] = initState;
-        return initStateId;
+        return "\"" + handlerId + "\"";
     }
     reRender() {
 
         // bind functions
         loopThruChildren = loopThruChildren.bind(this);
-        setDeclarativeEvents = setDeclarativeEvents.bind(this);
+        setEvents = setEvents.bind(this);
         setStyles = setStyles.bind(this);
 
         // remove event listeners
@@ -91,22 +87,20 @@ class Component extends HTMLElement {
         }
         this.styles = [];
 
-        // update this.state with passed in initStateId from state attribute
-        if (this.hasAttribute("state")) {
-            var initStateId = this.getAttribute("state");
-            var initState = window.cluApp.initStates[initStateId];
-            for (var key in initState) {
-                this.state[key] = initState[key];
-            }
-            delete window.cluApp.initStates[initStateId];
-            this.removeAttribute("state");
+        // update this.props with passed in propsId from props attribute
+        if (this.hasAttribute("props")) {
+            var propsId = this.getAttribute("props");
+            this.props = window.cluApp.props[propsId];
+            delete window.cluApp.props[propsId];
+            this.removeAttribute("props");
         }
 
-        // set styles with passed in styleId from styles attribute
+        // set styles with passed in stylesId from styles attribute
         setStyles(this);
 
         // clone this
         var clone = this.cloneNode();
+        clone.props = this.props;
         clone.state = this.state;
         clone.html = clone.html.bind(this);
         var div = document.createElement("div");
@@ -115,12 +109,12 @@ class Component extends HTMLElement {
         var thisClone = div.childNodes[0];
 
         // update this attributes to reflect thisClone attributes
-        updateAttributes(this, thisClone);
+        setAttributes(this, thisClone);
 
         // set event listeners
-        setDeclarativeEvents(this);
+        setEvents(this);
 
-        // set styles with styleId from styles attribute
+        // set styles with stylesId from styles attribute
         setStyles(this);
 
         // loop thru children
@@ -153,10 +147,10 @@ class Component extends HTMLElement {
                 } else if (Object.getPrototypeOf(child1) instanceof Component) {
 
                     // update child1 attributes to reflect child2 attributes
-                    updateAttributes(child1, child2);
+                    setAttributes(child1, child2);
 
                     // set event listeners
-                    setDeclarativeEvents(child1);
+                    setEvents(child1);
 
                     // set styles
                     setStyles(child1);
@@ -174,10 +168,10 @@ class Component extends HTMLElement {
                 } else {
 
                     // update child1 attributes to reflect child2 attributes
-                    updateAttributes(child1, child2);
+                    setAttributes(child1, child2);
 
                     // set event listeners
-                    setDeclarativeEvents(child1);
+                    setEvents(child1);
 
                     // set styles
                     setStyles(child1);
@@ -199,54 +193,54 @@ class Component extends HTMLElement {
 
             // replace marked nodes
             for (var c of childrenToReplace) {
-                setDeclarativeEvents(c[0]);
+                setEvents(c[0]);
                 c[1].parentNode.replaceChild(c[0], c[1]);
                 setStyles(c[0]);
             }
 
             // append marked nodes
             for (var c of childrenToAppend) {
-                setDeclarativeEvents(c);
+                setEvents(c);
                 node1.appendChild(c);
                 setStyles(c);
             }
             
         }
-        function setStyles(element) {
-            if (element.nodeType == 1 && element.hasAttribute("styles")) {
-                var styleId = element.getAttribute("styles");
-                var orig = window.cluApp.styles[styleId].orig;
-                var style = window.cluApp.styles[styleId].style;
-                var styleText = "";
-                for (var selector in style) {
-                    styleText += getSelector(element, selector, orig) + "{" + style[selector] + "}";
+        function setStyles(node) {
+            if (node.nodeType == 1 && node.hasAttribute("styles")) {
+                var stylesId = node.getAttribute("styles");
+                var orig = window.cluApp.styles[stylesId].orig;
+                var styles = window.cluApp.styles[stylesId].styles;
+                var stylesText = "";
+                for (var selector in styles) {
+                    stylesText += getSelector(node, selector, orig) + "{" + styles[selector] + "}";
                 }
                 var styleElement = document.createElement("style");
-                styleElement.textContent = styleText;
+                styleElement.textContent = stylesText;
                 document.head.append(styleElement);
-                delete window.cluApp.styles[styleId];
                 this.styles.push(styleElement);
-                element.removeAttribute("styles");
+                delete window.cluApp.styles[stylesId];
+                node.removeAttribute("styles");
             }
-            for (var i = 0; i < element.childNodes.length; i++) {
-                setStyles(element.childNodes[i]);
+            for (var i = 0; i < node.childNodes.length; i++) {
+                setStyles(node.childNodes[i]);
             }
         }
-        function setDeclarativeEvents(element) {
-            if (element.nodeType == 1) {
-                for (var attr of element.attributes) {
+        function setEvents(node) {
+            if (node.nodeType == 1) {
+                for (var attr of node.attributes) {
                     if (attr.name.slice(0, 3) == "on-") {
-                        element.addEventListener(attr.name.slice(3), window.cluApp.handlers[attr.value]);
-                        this.handlers.push([element, attr.name.slice(3), attr.value]);
-                        element.removeAttribute(attr.name);
+                        node.addEventListener(attr.name.slice(3), window.cluApp.handlers[attr.value]);
+                        this.handlers.push([node, attr.name.slice(3), attr.value]);
+                        node.removeAttribute(attr.name);
                     }
                 }
             }
-            for (var i = 0; i < element.childNodes.length; i++) {
-                setDeclarativeEvents(element.childNodes[i]);
+            for (var i = 0; i < node.childNodes.length; i++) {
+                setEvents(node.childNodes[i]);
             }
         }
-        function updateAttributes(node1, node2) {
+        function setAttributes(node1, node2) {
             if (node1.nodeType == 1 && node2.nodeType == 1) {
                 for (var attr of node1.attributes) {
                     if (node2.hasAttribute(attr.name)) {
@@ -264,15 +258,15 @@ class Component extends HTMLElement {
                 }
             }
         }
-        function getSelector(element, initSelector, orig) {
-            var selector = element.tagName + initSelector;
-            if (element == orig) {
+        function getSelector(node, initSelector, orig) {
+            var selector = node.tagName + initSelector;
+            if (node == orig) {
                 return selector;
             }
-            while (element.parentNode) {
-                selector = element.parentNode.tagName + ">" + selector;
-                element = element.parentNode;
-                if (element == orig) {
+            while (node.parentNode) {
+                selector = node.parentNode.tagName + ">" + selector;
+                node = node.parentNode;
+                if (node == orig) {
                     break;
                 }
             }
@@ -282,6 +276,12 @@ class Component extends HTMLElement {
     init() {}
     connectedCallback() {
         this.init();
+        this.reRender();
+    }
+    updateState(state) {
+        for (var key in state) {
+            this.state[key] = state[key];
+        }
         this.reRender();
     }
     async fetchData(url, data) {
@@ -300,29 +300,37 @@ class Component extends HTMLElement {
     }
 }
 class RouterRoute extends Component {
-    styles = ``;
     state = {
         html: this.innerHTML
     };
     render() {
-        return this.html`<router-route path="${this.state.path}" ${this.state.path == window.location.pathname ? "" : "hidden"}>${this.state.path == window.location.pathname ? this.state.html : ""}</router-route>`;
+        return this.html`
+            <router-route 
+                path="${this.props.path}" 
+                ${this.props.path == window.location.pathname ? "" : "hidden"}
+            >${this.props.path == window.location.pathname ? this.state.html : ""}</router-route>
+            `;
     }
 }
 class RouterLink extends Component {
-    styles = ``;
     state = {
         html: this.innerHTML
     };
     handleClick(event) {
         event.preventDefault();
-        window.history.pushState({}, "", this.state.path);
+        window.history.pushState({}, "", this.props.path);
         var routerRoutes = document.getElementsByTagName("router-route");
         for (var routerRoute of routerRoutes) {
             routerRoute.reRender();
         }
     }
     render() {
-        return this.html`<router-link path="${this.state.path}" on-click="${this.handleClick}">${this.state.html}</router-link>`;
+        return this.html`
+            <router-link 
+                path="${this.props.path}" 
+                on-click=${this.handleClick}
+            >${this.state.html}</router-link>
+            `;
     }
 }
 export { App, Component };

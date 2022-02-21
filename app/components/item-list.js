@@ -12,12 +12,12 @@ export default class ItemList extends clu.Component {
         return this.html`
             <item-list 
                 id="item-list"
-                on-click="${this.tester}"
-                styles="${{
+                on-click=${this.tester}
+                styles=${{
                     "": "background: purple;"
-                }}"
+                }}
             >
-                ${this.state.items.reduce((prev, cur) => prev + this.html`<p on-click="${this.clickHandler}">` + cur.text + "</p>", "")}
+                ${this.props.items.reduce((prev, cur) => prev + this.html`<p on-click=${this.clickHandler}>` + cur.text + "</p>", "")}
             </item-list>`;
     }
 }

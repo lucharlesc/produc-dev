@@ -28,31 +28,31 @@ export default class AppComponent extends clu.Component {
         return this.html`
             <app-component 
                 id="appid" 
-                on-click="${this.appclick}"
-                styles="${{
+                on-click=${this.appclick}
+                styles=${{
                     "": `display: block; background: ${this.state.counter % 2 == 0 ? "red" : "blue"}`
-                }}"
+                }}
             >
                 <router-link 
-                    state="${{ path: "/foo" }}"
-                    styles="${{
+                    props=${{ path: "/foo" }}
+                    styles=${{
                         "": `background: blue;`
-                    }}"
+                    }}
                 >
                     <a href="/foo">link to foo</a>
                 </router-link>
-                <router-route state="${{ path: "/" }}">this is root</router-route>
-                <router-route state="${{ path: "/foo" }}">this is foo</router-route>
-                <p><span><span styles="${{
+                <router-route props=${{ path: "/" }}><p>this is root</p></router-route>
+                <router-route props=${{ path: "/foo" }}><p>this is foo</p></router-route>
+                <p><span><span styles=${{
                     "": `color: orange;`
-                }}">counter</span> ${this.state.counter}</span></p>
-                <header-component on-click="${this.foobar}" state="${{ headerText: "headerText" }}"></header-component>
-                <item-input state="${{ handleKeydown: this.getItems }}"></item-input>
+                }}>counter</span> ${this.state.counter}</span></p>
+                <header-component on-click=${this.foobar} props=${{ headerText: "headerText" }}></header-component>
+                <item-input props=${{ handleKeydown: this.getItems }}></item-input>
                 <item-list 
-                    state="${{ items: this.state.items }}"
-                    styles="${{
+                    props=${{ items: this.state.items }}
+                    styles=${{
                         "": `display:block; background: green;`
-                    }}"
+                    }}
                 ></item-list>
             </app-component>
             `;

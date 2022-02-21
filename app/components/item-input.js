@@ -12,11 +12,11 @@ export default class ItemInput extends clu.Component {
                 item: item
             };
             var resData = await this.fetchData("/add-item", reqData);
-            this.state.handleKeydown();
+            this.props.handleKeydown();
             event.target.value = "";
         }
     }
     render() {
-        return this.html`<item-input><input type="text" on-keydown="${this.handleKeydown}"></item-input>`;
+        return this.html`<item-input><input type="text" on-keydown=${this.handleKeydown}></item-input>`;
     }
 }
