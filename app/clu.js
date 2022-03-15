@@ -71,7 +71,7 @@ class Component extends HTMLElement {
 
         // bind functions
         loopThruChildren = loopThruChildren.bind(this);
-        setEvents = setEvents.bind(this);
+        setHandlers = setHandlers.bind(this);
         setStyles = setStyles.bind(this);
 
         // remove event listeners
@@ -95,30 +95,11 @@ class Component extends HTMLElement {
             this.removeAttribute("props");
         }
 
-        // set styles with passed in stylesId from styles attribute
+        var clone = cloneComponent(this);
+        setAttributes(this, clone); // update this attributes to reflect clone attributes
+        setHandlers(this);
         setStyles(this);
-
-        // clone this
-        var clone = this.cloneNode();
-        clone.props = this.props;
-        clone.state = this.state;
-        clone.html = clone.html.bind(this);
-        var div = document.createElement("div");
-        div.appendChild(clone);
-        clone.outerHTML = clone.render();
-        var thisClone = div.childNodes[0];
-
-        // update this attributes to reflect thisClone attributes
-        setAttributes(this, thisClone);
-
-        // set event listeners
-        setEvents(this);
-
-        // set styles with stylesId from styles attribute
-        setStyles(this);
-
-        // loop thru children
-        loopThruChildren(this, thisClone);
+        loopThruChildren(this, clone);
 
         function loopThruChildren(node1, node2) {
 
@@ -131,52 +112,30 @@ class Component extends HTMLElement {
                 var child1 = node1.childNodes[i];
                 var child2 = node2.childNodes[i];
 
-                // if no child2
+                // no child2
                 if (!child2) {
+                    childrenToRemove.push(child1); // mark child1 for removal
 
-                    // mark child1 for removal
-                    childrenToRemove.push(child1);
-
-                // child2 exists, if different type
+                // child2 exists, different type
                 } else if (child1.nodeName != child2.nodeName) {
+                    childrenToReplace.push([child2, child1]); // mark child1 for replacement by child2
 
-                    // mark child1 for replacement by child2
-                    childrenToReplace.push([child2, child1]);
-
-                // child2 exists, same type, if component
+                // child2 exists, same type, component
                 } else if (Object.getPrototypeOf(child1) instanceof Component) {
-
-                    // update child1 attributes to reflect child2 attributes
-                    setAttributes(child1, child2);
-
-                    // set event listeners
-                    setEvents(child1);
-
-                    // set styles
+                    setAttributes(child1, child2); // update child1 attributes to reflect child2 attributes
+                    setHandlers(child1);
                     setStyles(child1);
-
-                    // rerender child1
                     child1.reRender();
 
-                // child2 exists, same type, not component, if text and different value
+                // child2 exists, same type, not component, text and different value
                 } else if (child1.nodeType == 3 && child1.nodeValue != child2.nodeValue) {
-
-                    // mark child1 for replacement by child2
-                    childrenToReplace.push([child2, child1]);
+                    childrenToReplace.push([child2, child1]); // mark child1 for replacement by child2
 
                 // child2 exists, same type, not component, not text
                 } else {
-
-                    // update child1 attributes to reflect child2 attributes
-                    setAttributes(child1, child2);
-
-                    // set event listeners
-                    setEvents(child1);
-
-                    // set styles
+                    setAttributes(child1, child2); // update child1 attributes to reflect child2 attributes
+                    setHandlers(child1);
                     setStyles(child1);
-
-                    // loop thru children
                     loopThruChildren(child1, child2);
                 }
             }
@@ -193,18 +152,28 @@ class Component extends HTMLElement {
 
             // replace marked nodes
             for (var c of childrenToReplace) {
-                setEvents(c[0]);
+                setHandlers(c[0]);
                 c[1].parentNode.replaceChild(c[0], c[1]);
                 setStyles(c[0]);
             }
 
             // append marked nodes
             for (var c of childrenToAppend) {
-                setEvents(c);
+                setHandlers(c);
                 node1.appendChild(c);
                 setStyles(c);
             }
             
+        }
+        function cloneComponent(component) {
+            var clone = component.cloneNode();
+            clone.props = component.props;
+            clone.state = component.state;
+            clone.html = clone.html.bind(component);
+            var div = document.createElement("div");
+            div.appendChild(clone);
+            clone.outerHTML = clone.render();
+            return div.childNodes[0];
         }
         function setStyles(node) {
             if (node.nodeType == 1 && node.hasAttribute("styles")) {
@@ -226,7 +195,7 @@ class Component extends HTMLElement {
                 setStyles(node.childNodes[i]);
             }
         }
-        function setEvents(node) {
+        function setHandlers(node) {
             if (node.nodeType == 1) {
                 for (var attr of node.attributes) {
                     if (attr.name.slice(0, 3) == "on-") {
@@ -237,7 +206,7 @@ class Component extends HTMLElement {
                 }
             }
             for (var i = 0; i < node.childNodes.length; i++) {
-                setEvents(node.childNodes[i]);
+                setHandlers(node.childNodes[i]);
             }
         }
         function setAttributes(node1, node2) {
@@ -259,18 +228,26 @@ class Component extends HTMLElement {
             }
         }
         function getSelector(node, initSelector, orig) {
-            var selector = node.tagName + initSelector;
+            var selector = node.tagName + ":nth-child(" + getElementIndex(node) + ")" + initSelector;
             if (node == orig) {
                 return selector;
             }
             while (node.parentNode) {
-                selector = node.parentNode.tagName + ">" + selector;
+                selector = node.parentNode.tagName + ":nth-child(" + getElementIndex(node.parentNode) + ")" + ">" + selector;
                 node = node.parentNode;
                 if (node == orig) {
                     break;
                 }
             }
             return selector;
+        }
+        function getElementIndex(node) {
+            var index = 1;
+            while (node.previousElementSibling) {
+                index++;
+                node = node.previousElementSibling;
+            }
+            return index;
         }
     }
     init() {}
